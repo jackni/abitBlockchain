@@ -6,7 +6,6 @@ const calculateHashForBlock = (block) => {
 };
 
 const getLatestBlock = (blockchain) => { 
-    console.log(blockchain);
     return blockchain.length > 0 ? blockchain[blockchain.length - 1] : undefined;
 }
 
@@ -25,18 +24,20 @@ const isValidNewBlock = (newBlock, previousBlock) => {
     return true;
 };
 
+// const getInitialBlock = (data) => {
+//     const timestamp = new Date().getTime() / 1000;
+//     const hash = utils.calculateHash(0,"0",timestamp, data);
+//     return new Block(0, "0", timestamp, data, hash);
+// }
 
-const getInitialBlock = (data) => {
-    const timestamp = new Date().getTime() / 1000;
-    const hash = utils.calculateHash(0,"0",timestamp, data);
-    return new Block(0, "0", timestamp, data, hash);
-}
+//first block in blockchain
+const getGenesisBlock = () => {
+    const hash = utils.calculateHash(0,"0",0000000000, "");
+    return new Block(0, "0", 0000000000, "", hash);
+};
 
 const generateNextBlock = (blockData, previousBlock) => {
 
-    // console.log('##########');
-    // console.log(previousBlock);
-    // console.log('##########');
     const nextIndex = previousBlock.index + 1;
     
     const nextTimestamp = new Date().getTime() / 1000;
@@ -50,7 +51,8 @@ const addBlock = (newBlock, blockchain) => {
     if (isValidNewBlock(newBlock, getLatestBlock(blockchain))) {
         blockchain.push(newBlock);
     }
-    return blockchain;
+    return;
+    // return blockchain;
 };
 
 const getBlockChain = ()=> {
@@ -60,6 +62,6 @@ const getBlockChain = ()=> {
 module.exports.addBlock = addBlock;
 module.exports.getLatestBlock = getLatestBlock;
 module.exports.isValidNewBlock = isValidNewBlock;
-module.exports.getInitialBlock = getInitialBlock;
+module.exports.getGenesisBlock = getGenesisBlock;
 module.exports.getBlockChain = getBlockChain;
 module.exports.generateNextBlock = generateNextBlock;

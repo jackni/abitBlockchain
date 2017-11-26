@@ -14,41 +14,22 @@ const initialPeers = process.env.PEERS ? process.env.PEERS.split(',') : [];
 
 const sockets = [];
 
-let inMemoBlockchain = [];
+const inMemoBlockchain = [chainService.getGenesisBlock()];
 
 var initHttpServer = () => {
     var app = express();
     app.use(bodyParser.json());
 
     app.get('/blocks', (req, res) => res.send(JSON.stringify(inMemoBlockchain)));
-    
-    // app.post('/initBlock',(req,res)=> {
-    //     const initBlock = chainService.getInitialBlock(req.body.data);
-    //     inMemoBlockchain.push(initBlock);
-    //     const msg = responseLatestMsg();
-    //     console.log(msg);
-    //     broadcast(msg);
-    //     res.send();
-    // });
 
     app.post('/mineBlock', (req, res) => {
-        if(inMemoBlockchain.length < 1) {
-            const initBlock = chainService.getInitialBlock(req.body.data);
-            inMemoBlockchain.push(initBlock);
-            const msg = responseLatestMsg();
-            console.log(msg);
-            broadcast(msg);
-            res.send();
-            return;
-        }
-
         const lastBlock = chainService.getLatestBlock(inMemoBlockchain);
         
         const newBlock = chainService.generateNextBlock(req.body.data, lastBlock);
-        inMemoBlockchain = chainService.addBlock(newBlock, inMemoBlockchain);
+
+        chainService.addBlock(newBlock, inMemoBlockchain);
         
         const msg = responseLatestMsg();
-        console.log(msg);
         broadcast(msg);
         console.log('block added: ' + JSON.stringify(newBlock));
         res.send();
@@ -66,44 +47,42 @@ var initHttpServer = () => {
 };
 
 
-var initP2PServer = () => {
+const initP2PServer = () => {
     var server = new WebSocket.Server({port: p2p_port});
     server.on('connection', ws => initConnection(ws));
     console.log('listening websocket p2p port on: ' + p2p_port);
 
 };
 
-var initConnection = (ws) => {
+const initConnection = (ws) => {
     sockets.push(ws);
     initMessageHandler(ws);
     initErrorHandler(ws);
     write(ws, queryChainLengthMsg());
 };
 
-var initMessageHandler = (ws) => {
+const initMessageHandler = (ws) => {
     ws.on('message', (data) => {
-        var message = JSON.parse(data);
+        const message = JSON.parse(data);
         console.log('Received message' + JSON.stringify(message));
         switch (message.type) {
-            case MessageType.QUERY_LATEST:
+            case MessageType.QUERY_LATEST://0
                 const msg = responseLatestMsg();
-                console.log(msg);
                 write(ws, msg);
                 break;
-            case MessageType.QUERY_ALL:
+            case MessageType.QUERY_ALL://1
                 const allchainMsg = responseChainMsg();
-                console.log(allchainMsg);
                 write(ws, allchainMsg);
                 break;
-            case MessageType.RESPONSE_BLOCKCHAIN:
+            case MessageType.RESPONSE_BLOCKCHAIN://2
                 handleBlockchainResponse(message);
                 break;
         }
     });
 };
 
-var initErrorHandler = (ws) => {
-    var closeConnection = (ws) => {
+const initErrorHandler = (ws) => {
+    const closeConnection = (ws) => {
         console.log('connection failed to peer: ' + ws.url);
         sockets.splice(sockets.indexOf(ws), 1);
     };
@@ -123,18 +102,18 @@ const connectToPeers = (newPeers) => {
 
 const handleBlockchainResponse = (message) => {
     const receivedBlocks = JSON.parse(message.data).sort((b1, b2) => (b1.index - b2.index));
-    
     const latestBlockReceived = receivedBlocks[receivedBlocks.length - 1];
+
+    const latestBlockHeld = chainService.getLatestBlock(inMemoBlockchain); //|| latestBlockReceived;
     
-    const latestBlockHeld = chainService.getLatestBlock(inMemoBlockchain);
-    console.log("*****************");
-    console.log(latestBlockHeld);
-    console.log("*****************");
-    if (latestBlockReceived && latestBlockHeld && (latestBlockReceived.index > latestBlockHeld.index)) {
-        console.log('blockchain possibly behind. We got: ' + latestBlockHeld.index + ' Peer got: ' + latestBlockReceived.index);
+    if (latestBlockReceived && (latestBlockReceived.index > latestBlockHeld.index)) {
+        
+        console.log('blockchain possibly behind. We got: ' 
+            + latestBlockHeld.index 
+            + ' Peer got: ' + latestBlockReceived.index);
+            
         if (latestBlockHeld.hash === latestBlockReceived.previousHash) {
             console.log("We can append the received block to our chain");
-            
             inMemoBlockchain.push(latestBlockReceived);
             
             broadcast(responseLatestMsg());
@@ -146,15 +125,15 @@ const handleBlockchainResponse = (message) => {
             replaceChain(receivedBlocks);
         }
     } else {
+        console.log(inMemoBlockchain);
         console.log('received blockchain is not longer than received blockchain. Do nothing');
     }
 };
 
 const replaceChain = (newBlocks) => {
-    if (isValidChain(newBlocks) && newBlocks.length > blockchain.length) {
+    if (isValidChain(newBlocks) && newBlocks.length > inMemoBlockchain.length) {
         console.log('Received blockchain is valid. Replacing current blockchain with received blockchain');
-
-        blockchain = newBlocks;
+        inMemoBlockchain.push(...newBlocks);
         
         broadcast(responseLatestMsg());
     } else {
@@ -163,7 +142,7 @@ const replaceChain = (newBlocks) => {
 };
 
 const isValidChain = (blockchainToValidate) => {
-    if (JSON.stringify(blockchainToValidate[0]) !== JSON.stringify(getGenesisBlock())) {
+    if (JSON.stringify(blockchainToValidate[0]) !== JSON.stringify(chainService.getGenesisBlock())) {
         return false;
     }
     const tempBlocks = [blockchainToValidate[0]];
